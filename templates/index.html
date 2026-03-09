@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calculadora de Ro Impresiones</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; padding: 20px; background-color: #f4f4f9; color: #333; }
+        h2 { text-align: center; font-size: 1.5rem; font-weight: normal; margin-bottom: 20px; }
+        .titulo-grande { display: block; font-size: 2.5rem; font-weight: 800; color: #000; margin-top: 5px; line-height: 1.2; }
+        .logo { display: block; margin: 0 auto 15px; max-height: 200px; }
+        .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); max-width: 500px; margin: 20px auto; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: 600; }
+        input[type="number"], select { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; font-size: 16px; }
+        button { width: 100%; padding: 12px; background: #007bff; color: white; border: none; border-radius: 8px; font-size: 16px; cursor: pointer; transition: background-color 0.2s; }
+        button:hover { background: #0056b3; }
+        #resultado { margin-top: 20px; padding: 15px; background: #e9ecef; border-radius: 8px; display: none; line-height: 1.6; }
+        .error { color: #dc3545; font-weight: bold; }
+        .total { font-size: 2.5rem; font-weight: 900; color: #28a745; text-align: center; margin: 15px 0; line-height: 1.1; }
+        .division-btn {
+            width: 100%;
+            padding: 10px;
+            margin-top: 10px;
+            background: #6c757d;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .division-btn:hover { background: #5a6268; }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <img src="/static/1.png" alt="Logo Ro Impresiones" class="logo">
+    <h2>Calculadora de<span class="titulo-grande">Ro Impresiones</span></h2>
+    <form id="calcForm">
+        <div class="form-group">
+            <label for="paginas">Cantidad de páginas:</label>
+            <input type="number" name="paginas" id="paginas" required min="1" inputmode="numeric" pattern="[0-9]*">
+        </div>
+
+        <div class="form-group">
+            <label for="tipo_color">Tipo de color:</label>
+            <select name="tipo_color" id="tipo_color">
+                <option value="bn">Blanco y Negro</option>
+                <option value="color">Color</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="tipo_faz">Tipo de faz:</label>
+            <select name="tipo_faz" id="tipo_faz">
+                <option value="simple">Simple</option>
+                <option value="doble">Doble</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label style="display: flex; align-items: center; user-select: none;">
+                <input type="checkbox" name="anillado" style="width: auto; height: 20px; width: 20px; margin-right: 10px;">
+                Lleva anillado
+            </label>
+        </div>
+
+        <button type="submit">Calcular</button>
+    </form>
+
+    <div id="resultado"></div>
+</div>
+
+<script>
+    document.getElementById('calcForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const formData = new FormData(e.target);
+        const resDiv = document.getElementById('resultado');
+        
+        try {
+            const response = await fetch('/calcular', { method: 'POST', body: formData });
+            const data = await response.json();
+            
+            resDiv.style.display = 'block';
+            
+            if (data.error) {
+                resDiv.innerHTML = `<p class="error">${data.error}</p>`;
+                return;
+            }
+
+            if (data.fuera_de_rango) {
+                let html = `<p class="error">⚠️ ${data.hojas} hojas exceden el límite de anillado (500).</p><p><strong>Seleccione una opción de división:</strong></p>`;
+                for (const [tomos, posible] of Object.entries(data.opciones_division)) {
+                    if (posible) {
+                        html += `<button class="division-btn" data-tomos="${tomos}" data-hojas="${data.hojas}" data-impresion="${data.precio_impresion}">Dividir en ${tomos} tomos</button>`;
+                    }
+                }
+                resDiv.innerHTML = html;
+
+                // Add event listeners to the new buttons
+                document.querySelectorAll('.division-btn').forEach(button => {
+                    button.addEventListener('click', async (e) => {
+                        const btn = e.target;
+                        btn.disabled = true; // Evitar doble click
+                        btn.textContent = 'Calculando...';
+
+                        const tomos = btn.dataset.tomos;
+                        const hojas = btn.dataset.hojas;
+                        const precio_impresion = parseFloat(btn.dataset.impresion);
+
+                        const formData = new FormData();
+                        formData.append('hojas', hojas);
+                        formData.append('tomos', tomos);
+
+                        try {
+                            const response = await fetch('/calcular-dividido', { method: 'POST', body: formData });
+                            const divisionData = await response.json();
+
+                            if (divisionData.error) {
+                                resDiv.innerHTML += `<p class="error">${divisionData.error}</p>`;
+                            } else {
+                                const precio_anillado = divisionData.total_anillado;
+                                const total_final = precio_impresion + precio_anillado;
+
+                                const finalHtml = `
+                                    <p>📄 Hojas físicas: <strong>${hojas}</strong></p>
+                                    <p>🖨️ Impresión: $${precio_impresion}</p>
+                                    <p>📒 Anillado: $${precio_anillado} (dividido en ${tomos} tomos)</p>
+                                    <hr><p class="total">💰 Total: $${total_final}</p>
+                                    <p><small>${divisionData.hojas_por_tomo}</small></p>
+                                `;
+                                resDiv.innerHTML = finalHtml;
+                            }
+                        } catch (err) {
+                            resDiv.innerHTML += '<p class="error">Error de conexión al calcular la división.</p>';
+                            btn.disabled = false;
+                            btn.textContent = `Dividir en ${tomos} tomos`;
+                        }
+                    });
+                });
+            } else {
+                resDiv.innerHTML = `
+                    <p>📄 Hojas físicas: <strong>${data.hojas}</strong></p>
+                    <p>🖨️ Impresión: $${data.precio_impresion}</p>
+                    <p>📒 Anillado: $${data.precio_anillado}</p>
+                    <hr><p class="total">💰 Total: $${data.total}</p>`;
+            }
+        } catch (err) {
+            resDiv.style.display = 'block';
+            resDiv.innerHTML = '<p class="error">Error de conexión con el servidor.</p>';
+        }
+    });
+</script>
+
+</body>
+</html>
