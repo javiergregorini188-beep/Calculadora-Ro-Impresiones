@@ -1,6 +1,13 @@
 import socket
 import os
-from flask import Flask, render_template, request, jsonify
+import sys
+
+try:
+    from flask import Flask, render_template, request, jsonify
+except ImportError:
+    print("\n❌ ERROR: La librería 'Flask' no está instalada. Ejecuta: pip install -r requirements.txt\n")
+    sys.exit(1)
+
 from models.calculadora import calcular_trabajo, calcular_anillado_dividido
 
 # Crear la aplicación Flask
